@@ -1,0 +1,67 @@
+import Data.Char (isDigit, digitToInt)
+
+data Token = IntLiteral Int
+           | Oper Operator
+           | OpenPar | ClosedPar
+           deriving (Eq, Show)
+
+data Operator = Plus | Minus | Times | Divide
+              deriving (Eq, Show)
+
+data AST = LitInteger Integer
+              | BinOp BinOperator AST AST
+              | UnOp UnOperator AST
+data BinOperator = Addition | Subtraction | Multiplication | Division
+data UnOperator = Negation
+
+fscan :: String -> [Token]
+fscan [] = []
+fscan (x:xs) | x == '+'    = Oper Plus    : fscan xs
+             | x == '-'    = Oper Minus   : fscan xs
+             | x == '*'    = Oper Times   : fscan xs
+             | x == '/'    = Oper Divide  : fscan xs
+             | x == '('    = OpenPar      : fscan xs
+             | x == ')'    = ClosedPar    : fscan xs
+             | x == ' '    = fscan xs
+             | isDigit x   = IntLiteral (digitToInt x) : fscan xs
+             | otherwise   = fscan xs
+
+cleanInts :: [Token] -> [Token]
+cleanInts [] = []
+cleanInts ((IntLiteral x):(IntLiteral y):xs) = cleanInts (IntLiteral (x*10 + y):xs)
+cleanInts (x:xs) = x : cleanInts xs
+
+scan :: String -> [Token]
+scan = cleanInts . fscan
+
+-- splitByPred :: [Token] -> [Token]
+-- splitByPred []     = []
+-- splitByPred (Oper x:xs) = if x == Plus || x == Minus then [] else x : splitByPred xs
+-- splitByPred (ClosePar:xs) = if x == Plus || x == Minus then [] else x : splitByPred xs
+
+splitOnFirst :: (Eq a) => [a] -> a -> [a] -> [[a]]
+splitOnFirst [] _ _ = [[]]
+splitOnFirst (x:xs) b as = if x == b then [as,xs] else splitOnFirst xs b (as ++ [x])
+
+splitOn :: (Eq a) => [a] -> a -> [[a]]
+splitOn xs a = splitOnFirst xs a []
+
+addOp :: Operator -> [Token] -> [Token] -> [[Token]]
+addOp m [] ys = [[Oper m],ys]
+addOp m (x:xs) ys | m == Plus || m == Minus =
+                    if x == OpenPar then [Oper m :x:xs,ys] else addOp m xs (ys ++ [x])
+                  | otherwise =
+                    if x == OpenPar || x == Oper Plus || x == Oper Minus then [Oper m :x:xs,ys] else addOp m xs (ys ++ [x])
+
+-- Shunting yard Algorithm
+--       Input,Operations, CurrentOut,
+shunt :: [Token] -> [Token] -> [Token] -> [Token]
+shunt [] as bs = bs ++ as
+shunt (IntLiteral x:xs) as bs = shunt xs as (bs ++ [IntLiteral x]) -- Numbers go straight to output
+shunt (OpenPar:xs) as bs      = shunt xs (OpenPar : as) bs              -- Open Brackets go straight to Operations
+shunt (ClosedPar:xs) as bs    = shunt xs (last split) (bs ++ head split) -- Close brackets move all non-bracket operators to the output
+                              where split = splitOn as OpenPar
+shunt (Oper m:xs) as bs       = shunt xs (head split) (last split)
+                              where split = addOp m as bs
+-- parse :: [Token] -> AST
+
